@@ -5,6 +5,7 @@ use strict;
 use Encode;
 use Exporter qw(import);
 use Net::LDAP::RootDSE;
+use Net::LDAP::Constant qw(LDAP_CAP_ACTIVE_DIRECTORY LDAP_CAP_ACTIVE_DIRECTORY_ADAM);
 
 our $VERSION = '0.04';
 our @EXPORT = qw(is_AD is_ADAM reset_ADpassword change_ADpassword);
@@ -15,7 +16,7 @@ sub is_AD {
   my $rootdse = $self->root_dse(attrs => [ qw/supportedCapabilities/ ])
     or return undef;
 
-  return (grep { $_ eq '1.2.840.113556.1.4.800' } $rootdse->get_value('supportedCapabilities'))
+  return (grep { $_ eq LDAP_CAP_ACTIVE_DIRECTORY } $rootdse->get_value('supportedCapabilities'))
          ? 1 : 0;
 }
 
@@ -24,7 +25,7 @@ sub is_ADAM {
   my $rootdse = $self->root_dse(attrs => [ qw/supportedCapabilities/ ])
     or return undef;
 
-  return (grep { $_ eq '1.2.840.113556.1.4.1851' } $rootdse->get_value('supportedCapabilities'))
+  return (grep { $_ eq LDAP_CAP_ACTIVE_DIRECTORY_ADAM } $rootdse->get_value('supportedCapabilities'))
          ? 1 : 0;
 }
 
