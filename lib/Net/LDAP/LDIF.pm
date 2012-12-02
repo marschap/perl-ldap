@@ -279,7 +279,7 @@ sub _read_entry {
     if ($changetype eq 'delete') {
       return $self->_error('LDIF "delete" entry is not valid', @ldif)
         if (@ldif);
-      return $entry;
+      return wantarray ? ($entry, @controls) : $entry;
     }
 
     return $self->_error('LDAP entry is not valid', @ldif)
@@ -376,7 +376,7 @@ sub _read_entry {
 
   $self->{_current_entry} = $entry;
 
-  $entry;
+  return wantarray ? ($entry, @controls) : $entry;
 }
 
 sub read_entry {
