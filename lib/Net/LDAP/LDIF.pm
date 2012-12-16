@@ -136,7 +136,7 @@ sub _read_url_attribute {
   my $self = shift;
   my $url = shift;
   my @ldif = @_;
-  my $line;
+  my @values;
 
   if ($url =~ s/^file:(?:\/\/)?//) {
     open(my $fh, '<', $url)
@@ -145,7 +145,8 @@ sub _read_url_attribute {
     binmode($fh);
     { # slurp in whole file at once
       local $/;
-      $line = <$fh>;
+      my $data = <$fh>;
+      @values = ($data);
     }
     close($fh);
   }
@@ -157,16 +158,18 @@ sub _read_url_attribute {
     return $self->_error("can't get data from $url: $!", @ldif)
       if (!$response->is_success);
 
-    $line = $response->decoded_content();
+    my $data = $response->decoded_content();
 
     return $self->error("decoding data from $url failed: $@", @ldif)
-      if (!defined($line));
+      if (!defined($data));
+
+    @values = ($data);
   }
   else {
     return $self->_error('unsupported URL type', @ldif);
   }
 
-  $line;
+  wantarray ? @values : (@values ? $values[0] : undef);
 }
 
 
@@ -176,19 +179,19 @@ sub _read_attribute_value {
   my $type = shift;
   my $value = shift;
   my @ldif = @_;
+  my @values = ($value);
 
   # Base64-encoded value: decode it
   if ($type && $type eq ':') {
     require MIME::Base64;
-    $value = MIME::Base64::decode($value);
+    @values = ( MIME::Base64::decode($value) );
   }
   # URL value: read from URL
   elsif ($type && $type eq '<' and $value =~ s/^(.*?)\s*$/$1/) {
-    $value = $self->_read_url_attribute($value, @ldif);
-    return  if (!defined($value));
+    @values = $self->_read_url_attribute($value, @ldif);
   }
 
-  $value;
+  wantarray ? @values : (@values ? $values[0] : undef);
 }
 
 
@@ -315,11 +318,12 @@ sub _read_entry {
           return $self->_error('LDAP entry is not valid', @ldif)
             if (defined($modattr) && $attr ne $modattr);
 
-          $val = $self->_read_attribute_value($xattr, $val, $line)
-            if ($xattr);
-          return  if !defined($val);
+          my @vals = ($xattr)
+                     ? $self->_read_attribute_value($xattr, $val, $line)
+                     : ($val);
+          return  if (!@vals);
 
-          $val = Encode::decode_utf8($val)
+          map { $_ = Encode::decode_utf8($_) } @vals
             if (CHECK_UTF8 && $self->{raw} && ($attr !~ /$self->{raw}/));
 
           if (!defined($lastattr) || $lastattr ne $attr) {
@@ -329,7 +333,7 @@ sub _read_entry {
             $lastattr = $attr;
             @values = ();
           }
-          push(@values, $val);
+          push(@values, @vals);
         }
         else {
           return $self->_error('LDAP entry is not valid', @ldif);
@@ -353,11 +357,12 @@ sub _read_entry {
 
         $last = $attr  if (!$last);
 
-        $val = $self->_read_attribute_value($xattr, $val, $line)
-          if ($xattr);
-        return  if !defined($val);
+        my @vals = ($xattr)
+                   ? $self->_read_attribute_value($xattr, $val, $line)
+                   : ($val);
+        return  if (!@vals);
 
-        $val = Encode::decode_utf8($val)
+        map { $_ = Encode::decode_utf8($_) } @vals
           if (CHECK_UTF8 && $self->{raw} && ($attr !~ /$self->{raw}/));
 
         if ($attr ne $last) {
@@ -365,7 +370,7 @@ sub _read_entry {
           @values = ();
           $last = $attr;
         }
-        push(@values, $val);
+        push(@values, @vals);
       }
       else {
         return $self->_error("illegal LDIF line '$line'", @ldif);
