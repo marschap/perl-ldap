@@ -165,6 +165,36 @@ sub _read_url_attribute {
 
     @values = ($data);
   }
+  elsif ($url =~ m{^ldap[is]?://}) {
+    require Net::LDAP;
+    eval { require URI::ldap; }
+      or  return $self->_error('URI::ldap no available', @ldif);
+
+    my $uri = URI->new($url)
+      or  return $self->_error('illegal LDAP URL', @ldif);
+    my $ldap = Net::LDAP->new($url)
+      or  return $self->_error('unable to contact LDAP server', @ldif);
+    my @attrs = $uri->attributes;
+
+    return $self->_error('only LDAP URLs with max. one attribute supported', @ldif)
+      if (scalar(@attrs) > 1);
+    @attrs = qw(1.1)  if (!@attrs);
+
+    my $search = $ldap->search(base => $uri->dn,
+                               filter => $uri->filter || '(objectClass=*)',
+                               scope => $uri->scope || 'base',
+                               attrs => \@attrs);
+    return $self->_error('searching LDAP server failed', @ldif)
+      if ($search->code);
+
+    foreach my $e ($search->entries) {
+      my @vals = (!@attrs || $attrs[0] eq '1.1')
+                 ? $e->dn
+                 : $e->get_attribute($attrs[0]);
+      push(@values, @vals);
+    }
+    $ldap->disconnect;
+  }
   else {
     return $self->_error('unsupported URL type', @ldif);
   }
