@@ -1382,6 +1382,15 @@ for e.g. C<member;range=1000-*> where the range starting index increases accordi
 See L<http://msdn.microsoft.com/en-us/library/windows/desktop/aa367017.aspx>
 for more details.
 
+=head2 How to get rid of the restrictions in AD?
+
+Explanation: L<http://support.microsoft.com/kb/2009267>
+
+Update the LDAP policy in AD: see L<http://support.microsoft.com/kb/315071> for details.
+
+In Win2008R2 you also need to override the hard-coded upper limits: 
+L<https://blogs.technet.com/b/qzaidi/archive/2010/09/02/override-the-hardcoded-ldap-query-limits-introduced-in-windows-server-2008-and-windows-server-2008-r2.aspx>
+
 =head2 How do I create a Microsoft Exchange 5.x user?
 
 This is a solution provided by a perl-ldap user.
