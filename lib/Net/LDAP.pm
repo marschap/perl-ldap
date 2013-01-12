@@ -516,6 +516,23 @@ sub search {
 
   my $mesg = $ldap->message('Net::LDAP::Search' => $arg);
 
+  if ($arg->{url}) {
+    eval { require URI::ldap };
+    return _error($ldap, $mesg, LDAP_LOCAL_ERROR, "$@")
+      if ($@);
+    my $uri = URI->new($arg->{url})
+      or  return _error($ldap, $mesg, LDAP_LOCAL_ERROR, "illegal URL");
+    my %extns = $uri->extensions;
+
+    #return _error($ldap, $mesg, LDAP_LOCAL_ERROR, "unhandled critical URL extension")
+    #  if (grep(/^!/, keys(%extns)));
+
+    $arg->{base}  = $uri->dn;
+    $arg->{filter} = $uri->filter || '(objectclass=*)';
+    $arg->{attrs}  = [ $uri->attributes ];
+    $arg->{scope}  = $uri->scope || 'base';
+  }
+
   my $control = $arg->{control}
     and $ldap->{net_ldap_version} < 3
     and return _error($ldap, $mesg, LDAP_PARAM_ERROR, 'Controls require LDAPv3');

@@ -742,6 +742,16 @@ The value provided here overwrites the value inherited from the constructor.
 
 Example: raw =E<gt> qr/(?i:^jpegPhoto|;binary)/
 
+=item url =E<gt> LDAP-URL
+
+Ignore any values passed via the options C<base>, C<filter>, C<scope>, and
+C<attrs>.
+Instead take the values for those options from LDAP-URL, which is expected
+to be an LDAP URL according to RFC 4516.
+
+If any of those values is not present in LDAP-URL, fall back to the defaults
+as specified in RFC 4516.
+
 =back
 
 B<Example>
