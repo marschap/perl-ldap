@@ -47,6 +47,9 @@ our @EXPORT_OK = qw(
   ldap_url_parse
   generalizedTime_to_time
   time_to_generalizedTime
+  ADtimestamp_to_time
+  time_to_ADtimestamp
+  parse_ADtimestamp
 );
 our %EXPORT_TAGS = (
 	error	=> [ qw(ldap_error_name ldap_error_text ldap_error_desc) ],
@@ -56,7 +59,8 @@ our %EXPORT_TAGS = (
 	escape 	=> [ qw(escape_filter_value unescape_filter_value
 	                escape_dn_value unescape_dn_value) ],
 	url   	=> [ qw(ldap_url_parse) ],
-	time	=> [ qw(generalizedTime_to_time time_to_generalizedTime) ],
+	time	=> [ qw(generalizedTime_to_time time_to_generalizedTime
+	                ADtimestamp_to_time time_to_ADtimestamp parse_ADtimestamp) ],
 );
 
 our $VERSION = '0.19';
@@ -874,6 +878,156 @@ my %opt = @_;
   return undef;
 }
 
+
+=item ADtimestamp_to_time ( AD-TIMESTAMP )
+
+Convert the AD timestamp B<AD-TIMESTAMP>, which represents the number
+of 100-nanosecond intervals since midnight January 1st 1601
+to an extended UNIX time.
+
+Returns the UNIX time, or C<undef> on error.
+
+=cut
+
+sub ADtimestamp_to_time($)
+{
+my $ADtimestamp = shift;
+
+  eval { require Math::BigInt };
+  unless ($@) {
+    my $time = Math::BigInt->new($ADtimestamp);
+    my $dec = $time->copy->bmod('10000000');	# get the decimals
+    $time->bdiv('10000000');			# convert to seconds
+    $time->bsub('116444736000000000');		# substract seconds between 1.1.1601 and 1.1.11970
+
+    # format decimals & strip trailing zeros
+    $dec = $dec->is_zero ? '' : '0' x (7 - length($dec->bstr)) . $dec->bstr;
+    $dec =~ s/0+$//;
+
+    $time = $time->bstr;
+    if ($dec != 0) {
+      $dec = "0.$dec";
+      if ($time < 0) {
+        $time++;
+        $dec = 1 - $dec;
+      }
+      $dec =~ s/^0\.//;
+      $time .= '.'.$dec;
+    }
+
+    return $time;
+  }
+
+  return undef;
+}
+
+
+=item time_to_ADtimestamp ( TIME )
+
+Convert the UNIX time B<TIME> to an AD timestamp.
+
+Returns the AD timestamp, or C<undef> on error.
+
+=cut
+
+sub time_to_ADtimestamp($)
+{
+my $time = shift;
+my $dec = @_ ? shift : 0;
+
+  if ($time =~ s/^(-?\d+)\.(\d+)$/$1/) {
+    $dec = "0.$2";
+
+    if ($time < 0 && $dec != 0) {
+      $time++;
+      $dec = 1 - $dec;
+    }
+  }
+
+  eval { require Math::BigInt };
+  unless ($@) {
+    my $timestamp = Math::BigInt->new("$time");
+
+    # add number of seconds between 1.1.1601 and 1.1.11970
+    $timestamp->badd('116444736000000000');
+
+    # time too small for AD timestamp
+    return undef  if ($timestamp->is_neg());
+
+    # convert to 100-nanosecond intervals
+    $timestamp->bmul(10000000);
+
+    # add decimals [a bit kludgy]
+    if ($dec && $dec =~ /^0\.(\d{1,7})/) {
+      my $subsec = $1;
+
+      $timestamp->badd($subsec . '0' x (7 - length($subsec)));
+    }
+
+    return $timestamp->bstr;
+  }
+
+  return undef;
+}
+
+
+=item parse_ADtimestamp( AD-TIMESTAMP )
+
+Parse an ActiveDirectory timestamp into generalizedTime.
+
+ActiveDirectory stores date/time values as the number of 100-nanosecond
+intervals since the midnight January 1st, 1601.
+
+Returns the generalizedTime (in UTC) in scalar mode, and a 7-element array of
+(year, month, day, hour, minute, second, subseconds) in list mode
+
+=cut
+
+## Convert ADtimestamp to GeneralizedTime / a list of date/time elements
+# Synopsis: {$generalizedTime|(date/time list)} = parse_ADtimestamp($ADtimestamp)
+sub parse_ADtimestamp($@)
+{
+my $ADtimestamp = shift;
+my ($year, $month, $day, $hour, $minute, $second, $subsec) = (1601, 0, 1, 0, 0, 0, 0);
+
+  $subsec = $ADtimestamp % 10000000;
+  $ADtimestamp = ($ADtimestamp - $subsec) / 10000000;
+  my $secs = $ADtimestamp % 86400;
+  my $days = ($ADtimestamp - $secs) / 86400;
+
+  while ($days > 0) {
+    # take care of leap years
+    my $days_in_year = ($year % 4) || ($year % 400) && (!($year % 100)) ? 365 : 366;
+
+    last if ($days < $days_in_year);
+    $year++;
+    $days -= $days_in_year;
+  }
+
+  my @days_in_months = qw(31 29 31 30 31 30 31 31 30 31 30 31);
+  # take care of leap year
+  $days_in_months[1]--  if ($year % 4) || ($year % 400) && (!($year % 100));
+
+  while ($days > $days_in_months[$month]) {
+    $days -= $days_in_months[$month];
+    $month++;
+  }
+  $month++;
+  $day += $days;
+
+  $second = $secs % 60;
+  $secs -= $second;
+  $secs /= 60;
+  $minute = $secs % 60;
+  $hour = ($secs - $minute) / 60;
+
+  return wantarray
+         ? ($year, $month, $day, $hour, $minute, $second, $subsec)
+         : sprintf("%04d%02d%02d%02d%02d%02d%sZ",
+                   $year, $month, $day,
+                   $hour, $minute, $second,
+                   $subsec ? ".$subsec" : "");
+}
 
 =back
 
