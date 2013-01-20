@@ -49,6 +49,13 @@ sub change_ADpassword {
                                   add    => [ unicodePwd => $newpw ] ]);
 }
 
+
+# add supported_capabilities() method to Net::LDAP::RootDSE
+
+sub Net::LDAP::RootDSE::supported_capability {
+  Net::LDAP::RootDSE::_supported_feature(@_, 'supportedCapabilities');
+}
+
 1;
 
 __END__
@@ -124,6 +131,20 @@ For this method to work, the caller needs to be bound to AD with
 sufficient permissions, and the connection needs to be encrypted.
 
 =back
+
+
+In addition to the new methods for Net::LDAP above, Net::LDAP::Extra::AD
+also extends Net::LDAP::RootDSE by one method:
+
+=over 4
+
+=item supported_capability ( OID_LIST )
+
+Returns true if the server supports all of the specified
+capability OIDs.
+
+=back
+
 
 =head1 AUTHOR
 
